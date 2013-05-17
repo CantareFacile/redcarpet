@@ -86,7 +86,7 @@ enum markdown_char_t {
 	MD_CHAR_ESCAPE,
 	MD_CHAR_ENTITITY,
 	MD_CHAR_AUTOLINK_URL,
-	MD_CHAR_AUTOLINK_EMAIL,
+	// MD_CHAR_AUTOLINK_EMAIL,
 	MD_CHAR_AUTOLINK_WWW,
 	MD_CHAR_SUPERSCRIPT,
 };
@@ -101,7 +101,7 @@ static char_trigger markdown_char_ptrs[] = {
 	&char_escape,
 	&char_entity,
 	&char_autolink_url,
-	&char_autolink_email,
+	// &char_autolink_email,
 	&char_autolink_www,
 	&char_superscript,
 };
@@ -310,12 +310,12 @@ tag_length(uint8_t *data, size_t size, enum mkd_autolink *autolink)
 	while (i < size && (isalnum(data[i]) || data[i] == '.' || data[i] == '+' || data[i] == '-'))
 		i++;
 
-	if (i > 1 && data[i] == '@') {
-		if ((j = is_mail_autolink(data + i, size - i)) != 0) {
-			*autolink = MKDA_EMAIL;
-			return i + j;
-		}
-	}
+	// if (i > 1 && data[i] == '@') {
+	// 	if ((j = is_mail_autolink(data + i, size - i)) != 0) {
+	// 		*autolink = MKDA_EMAIL;
+	// 		return i + j;
+	// 	}
+	// }
 
 	if (i > 2 && data[i] == ':') {
 		*autolink = MKDA_NORMAL;
@@ -2440,7 +2440,7 @@ sd_markdown_new(
 
 	if (extensions & MKDEXT_AUTOLINK) {
 		md->active_char[':'] = MD_CHAR_AUTOLINK_URL;
-		md->active_char['@'] = MD_CHAR_AUTOLINK_EMAIL;
+		// md->active_char['@'] = MD_CHAR_AUTOLINK_EMAIL;
 		md->active_char['w'] = MD_CHAR_AUTOLINK_WWW;
 	}
 
