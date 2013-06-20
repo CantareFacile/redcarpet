@@ -1,3 +1,4 @@
+# coding: UTF-8
 require 'test_helper'
 
 class MarkdownTest < Test::Unit::TestCase
@@ -189,6 +190,15 @@ EOS
     assert output.include? '<em>some</em>'
   end
 
+  def test_highlight_flag_works
+    text = "this is ==highlighted=="
+
+    refute render_with({}, text).include? '<mark>highlighted</mark>'
+
+    output = render_with({:highlight => true}, text)
+    assert output.include? '<mark>highlighted</mark>'
+  end
+
   def test_that_fenced_flag_works
     text = <<fenced
 This is a simple test
@@ -255,5 +265,9 @@ text
     assert render_with({:no_intra_emphasis => true}, "this fails: hello_world_") !~ /<em>/
     assert render_with({:no_intra_emphasis => true}, "this also fails: hello_world_#bye") !~ /<em>/
     assert render_with({:no_intra_emphasis => true}, "this works: hello_my_world") !~ /<em>/
+
+    markdown = "This is (**bold**) and this_is_not_italic!"
+    html = "<p>This is (<strong>bold</strong>) and this_is_not_italic!</p>\n"
+    assert_equal html, render_with({:no_intra_emphasis => true}, markdown)
   end
 end
