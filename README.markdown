@@ -11,7 +11,7 @@ case since version 2 -- it now has its own API, but retains the old name. Yes,
 that does mean that Redcarpet 2 is not backwards-compatible with the 1.X
 versions.
 
-Redcarpet is powered by the [Sundown](https://www.github.com/vmg/sundown)
+Redcarpet is based on the [Sundown](https://www.github.com/vmg/sundown)
 library. You might want to find out more about Sundown to see what makes this
 Ruby library so awesome.
 
@@ -29,10 +29,15 @@ You can totally install it as a Gem
 
 Redcarpet is readily available as a Ruby gem. It will build some native
 extensions, but the parser is standalone and requires no installed libraries.
+Prior to Redcarpet 3.0, the minimum required Ruby version is 1.9.2.
 
     $ [sudo] gem install redcarpet
 
-The Redcarpet source (including Sundown as a submodule) is available at GitHub:
+If you need to use it with Ruby 1.8.7, you will need to stick with 2.3.0:
+
+    $ [sudo] gem install redcarpet -v 2.3.0
+
+The Redcarpet source is available at GitHub:
 
     $ git clone git://github.com/vmg/redcarpet.git
 
@@ -92,13 +97,20 @@ empty line as in the Markdown standard.
 at the beginning of a header and its name, e.g. `#this is my header`
 would not be a valid header.
 
-* `:superscript`: parse superscripts after the `^` character; contiguous superscripts are nested together, and complex values can be enclosed in parenthesis, e.g. `this is the 2^(nd) time`
+* `:superscript`: parse superscripts after the `^` character; contiguous superscripts
+are nested together, and complex values can be enclosed in parenthesis, e.g.
+`this is the 2^(nd) time`.
 
 * `:underline`: parse underscored emphasis as underlines.
 `This is _underlined_ but this is still *italic*`.
 
 * `:highlight`: parse highlights.
 `This is ==highlighted==`. It looks like this: `<mark>highlighted</mark>`
+
+* `:footnotes`: parse footnotes, PHP-Markdown style. A footnote works very much
+like a reference-style link: it consists of a  marker next to the text (e.g.
+`This is a sentence.[^1]`) and a footnote definition on its own line anywhere
+within the document (e.g. `[^1]: This is a footnote.`).
 
 Example:
 
@@ -127,11 +139,11 @@ performance — several degrees of magnitude faster than other Ruby Markdown
 solutions.
 
 All the rendering flags that previously applied only to HTML output have
-now been moved to the `Render::HTML` class, and may be enabled when
+now been moved to the `Redcarpet::Render::HTML` class, and may be enabled when
 instantiating the renderer:
 
 ~~~~~ ruby
-Render::HTML.new(render_options = {})
+Redcarpet::Render::HTML.new(render_options = {})
 ~~~~~
 
 Initializes an HTML renderer. The following flags are available:
@@ -293,7 +305,7 @@ The SmartyPants parser can be found in `Redcarpet::Render::SmartyPants`. It has
 been implemented as a module, so it can be used standalone or as a mixin.
 
 When mixed with a Renderer class, it will override the `postprocess` method
-to perform SmartyPants replacements once the rendering is complete
+to perform SmartyPants replacements once the rendering is complete.
 
 ~~~~ ruby
 # Mixin

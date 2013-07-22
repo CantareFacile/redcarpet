@@ -62,6 +62,9 @@ static void rb_redcarpet_md_flags(VALUE hash, unsigned int *enabled_extensions_p
 	if (rb_hash_lookup(hash, CSTR2SYM("superscript")) == Qtrue)
 		extensions |= MKDEXT_SUPERSCRIPT;
 
+	if (rb_hash_lookup(hash, CSTR2SYM("footnotes")) == Qtrue)
+		extensions |= MKDEXT_FOOTNOTES;
+
 	*enabled_extensions_p = extensions;
 }
 
@@ -113,8 +116,8 @@ static VALUE rb_redcarpet_md_render(VALUE self, VALUE text)
 
 	if (rb_respond_to(rb_rndr, rb_intern("preprocess")))
 		text = rb_funcall(rb_rndr, rb_intern("preprocess"), 1, text);
-  if (NIL_P(text))
-    return Qnil;
+	if (NIL_P(text))
+		return Qnil;
 
 #ifdef HAVE_RUBY_ENCODING_H
 	{
@@ -135,7 +138,7 @@ static VALUE rb_redcarpet_md_render(VALUE self, VALUE text)
 		markdown);
 
 	/* build the Ruby string */
-	text = redcarpet_str_new((const char*)output_buf->data, output_buf->size, rb_enc_get(text));
+	text = rb_enc_str_new((const char*)output_buf->data, output_buf->size, rb_enc_get(text));
 
 	bufrelease(output_buf);
 
@@ -148,11 +151,11 @@ static VALUE rb_redcarpet_md_render(VALUE self, VALUE text)
 __attribute__((visibility("default")))
 void Init_redcarpet()
 {
-    rb_mRedcarpet = rb_define_module("Redcarpet");
+	rb_mRedcarpet = rb_define_module("Redcarpet");
 
 	rb_cMarkdown = rb_define_class_under(rb_mRedcarpet, "Markdown", rb_cObject);
-    rb_define_singleton_method(rb_cMarkdown, "new", rb_redcarpet_md__new, -1);
-    rb_define_method(rb_cMarkdown, "render", rb_redcarpet_md_render, 1);
+	rb_define_singleton_method(rb_cMarkdown, "new", rb_redcarpet_md__new, -1);
+	rb_define_method(rb_cMarkdown, "render", rb_redcarpet_md_render, 1);
 
 	Init_redcarpet_rndr();
 }

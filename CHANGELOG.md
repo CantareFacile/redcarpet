@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 3.0.0
+
+* Remove support for Ruby 1.8.x *Matt Rogers & Robin Dupret*
+
+* Avoid escaping for HTML comments *Robin Dupret*
+
 * Make emphasis wrapped inside parenthesis parsed *Robin Dupret*
 
 * Remove the Sundown submodule *Robin Dupret*
@@ -14,6 +20,8 @@
 
 * Ensure nested code spans put in emphasis work correctly *Robin Dupret*
 
+* Add optional footnotes support *Ben Dolman, Adam Florin, microjo, brief*
+  
 ## Version 2.3.0
 
 * Add a `:disable_indented_code_blocks` option *Dmitriy Kiriyenko*

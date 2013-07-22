@@ -40,11 +40,7 @@ VALUE rb_cRenderHTML;
 VALUE rb_cRenderHTML_TOC;
 VALUE rb_mSmartyPants;
 
-#ifdef HAVE_RUBY_ENCODING_H
-#define buf2str(t) ((t) ? redcarpet_str_new((const char*)(t)->data, (t)->size, opt->active_enc) : Qnil)
-#else
-#define buf2str(t) ((t) ? redcarpet_str_new((const char*)(t)->data, (t)->size, NULL) : Qnil)
-#endif
+#define buf2str(t) ((t) ? rb_enc_str_new((const char*)(t)->data, (t)->size, opt->active_enc) : Qnil)
 
 static void
 rndr_blockcode(struct buf *ob, const struct buf *text, const struct buf *lang, void *opaque)
@@ -134,7 +130,17 @@ rndr_tablecell(struct buf *ob, const struct buf *text, int align, void *opaque)
 	BLOCK_CALLBACK("table_cell", 2, buf2str(text), rb_align);
 }
 
+static void
+rndr_footnotes(struct buf *ob, const struct buf *text, void *opaque)
+{
+	BLOCK_CALLBACK("footnotes", 1, buf2str(text));
+}
 
+static void
+rndr_footnote_def(struct buf *ob, const struct buf *text, unsigned int num, void *opaque)
+{
+	BLOCK_CALLBACK("footnote_def", 2, buf2str(text), INT2FIX(num));
+}
 
 
 /***
@@ -219,6 +225,12 @@ rndr_superscript(struct buf *ob, const struct buf *text, void *opaque)
 	SPAN_CALLBACK("superscript", 1, buf2str(text));
 }
 
+static int
+rndr_footnote_ref(struct buf *ob, unsigned int num, void *opaque)
+{
+	SPAN_CALLBACK("footnote_ref", 1, INT2FIX(num));
+}
+
 /**
  * direct writes
  */
@@ -279,6 +291,8 @@ static struct sd_callbacks rb_redcarpet_callbacks = {
 	rndr_table,
 	rndr_tablerow,
 	rndr_tablecell,
+	rndr_footnotes,
+	rndr_footnote_def,
 
 	rndr_autolink,
 	rndr_codespan,
@@ -293,6 +307,7 @@ static struct sd_callbacks rb_redcarpet_callbacks = {
 	rndr_triple_emphasis,
 	rndr_strikethrough,
 	rndr_superscript,
+	rndr_footnote_ref,
 
 	rndr_entity,
 	rndr_normal_text,
@@ -313,6 +328,8 @@ static const char *rb_redcarpet_method_names[] = {
 	"table",
 	"table_row",
 	"table_cell",
+	"footnotes",
+	"footnote_def",
 
 	"autolink",
 	"codespan",
@@ -327,6 +344,7 @@ static const char *rb_redcarpet_method_names[] = {
 	"triple_emphasis",
 	"strikethrough",
 	"superscript",
+	"footnote_ref",
 
 	"entity",
 	"normal_text",
@@ -464,7 +482,7 @@ static VALUE rb_redcarpet_smartypants_render(VALUE self, VALUE text)
 	output_buf = bufnew(128);
 
 	sdhtml_smartypants(output_buf, (const uint8_t*)RSTRING_PTR(text), RSTRING_LEN(text));
-	result = redcarpet_str_new((const char*)output_buf->data, output_buf->size, rb_enc_get(text));
+	result = rb_enc_str_new((const char*)output_buf->data, output_buf->size, rb_enc_get(text));
 
 	bufrelease(output_buf);
 	return result;
