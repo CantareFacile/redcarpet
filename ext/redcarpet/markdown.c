@@ -89,6 +89,7 @@ typedef size_t
 static size_t char_emphasis(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
 static size_t char_underline(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
 static size_t char_highlight(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
+static size_t char_quote(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
 static size_t char_linebreak(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
 static size_t char_codespan(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
 static size_t char_escape(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size);
@@ -113,6 +114,7 @@ enum markdown_char_t {
 	// MD_CHAR_AUTOLINK_EMAIL,
 	MD_CHAR_AUTOLINK_WWW,
 	MD_CHAR_SUPERSCRIPT,
+	MD_CHAR_QUOTE
 };
 
 static char_trigger markdown_char_ptrs[] = {
@@ -128,6 +130,7 @@ static char_trigger markdown_char_ptrs[] = {
 	// &char_autolink_email,
 	&char_autolink_www,
 	&char_superscript,
+	&char_quote
 };
 
 /* render • structure containing one particular render */
@@ -787,6 +790,48 @@ char_codespan(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t of
 	return end;
 }
 
+/* char_quote • '"' parsing a quote */
+static size_t
+char_quote(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t offset, size_t size)
+{
+	size_t end, nq = 0, i, f_begin, f_end;
+
+	/* counting the number of quotes in the delimiter */
+	while (nq < size && data[nq] == '"')
+		nq++;
+
+	/* finding the next delimiter */
+	i = 0;
+	for (end = nq; end < size && i < nq; end++) {
+		if (data[end] == '"') i++;
+		else i = 0;
+	}
+
+	if (i < nq && end >= size)
+		return 0; /* no matching delimiter */
+
+	/* trimming outside whitespaces */
+	f_begin = nq;
+	while (f_begin < end && data[f_begin] == ' ')
+		f_begin++;
+
+	f_end = end - nq;
+	while (f_end > nq && data[f_end-1] == ' ')
+		f_end--;
+
+	/* real quote */
+	if (f_begin < f_end) {
+		struct buf work = { data + f_begin, f_end - f_begin, 0, 0 };
+		if (!rndr->cb.quote(ob, &work, rndr->opaque))
+			end = 0;
+	} else {
+		if (!rndr->cb.quote(ob, 0, rndr->opaque))
+			end = 0;
+	}
+
+	return end;
+}
+
 
 /* char_escape • '\\' backslash escape */
 static size_t
@@ -930,7 +975,7 @@ char_autolink_url(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_
 
 	link = rndr_newbuf(rndr, BUFFER_SPAN);
 
-	if ((link_len = sd_autolink__url(&rewind, link, data, offset, size, 0)) > 0) {
+	if ((link_len = sd_autolink__url(&rewind, link, data, offset, size, SD_AUTOLINK_SHORT_DOMAINS)) > 0) {
 		ob->size -= rewind;
 		rndr->cb.autolink(ob, link, MKDA_NORMAL, rndr->opaque);
 	}
@@ -1599,7 +1644,7 @@ parse_paragraph(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t 
 		 * let's check to see if there's some kind of block starting
 		 * here
 		 */
-		if ((rndr->ext_flags & MKDEXT_LAX_SPACING) && !isalnum(data[i])) {
+		if ((rndr->ext_flags & MKDEXT_LAX_SPACING) && !isalpha(data[i])) {
 			if (prefix_oli(data + i, size - i) ||
 				prefix_uli(data + i, size - i)) {
 				end = i;
@@ -1667,7 +1712,7 @@ parse_paragraph(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t 
 		parse_inline(header_work, rndr, work.data, work.size);
 
 		if (rndr->cb.header)
-			rndr->cb.header(ob, header_work, (int)level, rndr->opaque);
+			rndr->cb.header(ob, header_work, (int)level, header_anchor(header_work), rndr->opaque);
 
 		rndr_popbuf(rndr, BUFFER_SPAN);
 	}
@@ -1848,10 +1893,8 @@ parse_listitem(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t s
 			if (!sublist)
 				sublist = work->size;
 		}
-		/* joining only indented stuff after empty lines;
-		 * note that now we only require 1 space of indentation
-		 * to continue a list */
-		else if (in_empty && pre == 0) {
+		/* joining only indented stuff after empty lines */
+		else if (in_empty && i < 4 && data[beg] != '\t') {
 			*flags |= MKD_LI_END;
 			break;
 		}
@@ -1949,7 +1992,7 @@ parse_atxheader(struct buf *ob, struct sd_markdown *rndr, uint8_t *data, size_t 
 		parse_inline(work, rndr, data + i, end - i);
 
 		if (rndr->cb.header)
-			rndr->cb.header(ob, work, (int)level, rndr->opaque);
+			rndr->cb.header(ob, work, (int)level, header_anchor(work), rndr->opaque);
 
 		rndr_popbuf(rndr, BUFFER_SPAN);
 	}
@@ -2563,11 +2606,11 @@ is_ref(const uint8_t *data, size_t beg, size_t end, size_t *last, struct link_re
 	i++;
 	if (i >= end || data[i] != ':') return 0;
 	i++;
-	while (i < end && data[i] == ' ') i++;
+	while (i < end && strchr("\t ", data[i])) i++;
 	if (i < end && (data[i] == '\n' || data[i] == '\r')) {
 		i++;
 		if (i < end && data[i] == '\r' && data[i - 1] == '\n') i++; }
-	while (i < end && data[i] == ' ') i++;
+	while (i < end && strchr("\t ", data[i])) i++;
 	if (i >= end) return 0;
 
 	/* link: whitespace-free sequence, optionally between angle brackets */
@@ -2583,7 +2626,7 @@ is_ref(const uint8_t *data, size_t beg, size_t end, size_t *last, struct link_re
 	else link_end = i;
 
 	/* optional spacer: (space | tab)* (newline | '\'' | '"' | '(' ) */
-	while (i < end && data[i] == ' ') i++;
+	while (i < end && strchr("\t ", data[i])) i++;
 	if (i < end && data[i] != '\n' && data[i] != '\r'
 			&& data[i] != '\'' && data[i] != '"' && data[i] != '(')
 		return 0;
@@ -2596,7 +2639,7 @@ is_ref(const uint8_t *data, size_t beg, size_t end, size_t *last, struct link_re
 	/* optional (space|tab)* spacer after a newline */
 	if (line_end) {
 		i = line_end + 1;
-		while (i < end && data[i] == ' ') i++; }
+		while (i < end && strchr("\t ", data[i])) i++; }
 
 	/* optional title: any non-newline sequence enclosed in '"()
 					alone on its line */
@@ -2727,6 +2770,9 @@ sd_markdown_new(
 	if (extensions & MKDEXT_SUPERSCRIPT)
 		md->active_char['^'] = MD_CHAR_SUPERSCRIPT;
 
+	if (extensions & MKDEXT_QUOTE)
+		md->active_char['"'] = MD_CHAR_QUOTE;
+
 	/* Extension data */
 	md->ext_flags = extensions;
 	md->opaque = opaque;
@@ -2844,12 +2890,4 @@ sd_markdown_free(struct sd_markdown *md)
 	redcarpet_stack_free(&md->work_bufs[BUFFER_BLOCK]);
 
 	free(md);
-}
-
-void
-sd_version(int *ver_major, int *ver_minor, int *ver_revision)
-{
-	*ver_major = SUNDOWN_VER_MAJOR;
-	*ver_minor = SUNDOWN_VER_MINOR;
-	*ver_revision = SUNDOWN_VER_REVISION;
 }

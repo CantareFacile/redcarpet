@@ -11,6 +11,8 @@ class HTMLRenderTest < Test::Unit::TestCase
       :safe_links => Redcarpet::Render::HTML.new(:safe_links_only => true),
       :escape_html => Redcarpet::Render::HTML.new(:escape_html => true),
       :hard_wrap => Redcarpet::Render::HTML.new(:hard_wrap => true),
+      :toc_data => Redcarpet::Render::HTML.new(:with_toc_data => true),
+      :prettify => Redcarpet::Render::HTML.new(:prettify => true)
     }
   end
 
@@ -131,12 +133,6 @@ HTML
     assert output.include? '<a href="http://bar.com">'
   end
 
-  def test_that_comments_arent_escaped
-    input = "<!-- This is a nice comment! -->"
-    output = render_with(@rndr[:escape_html], input)
-    assert output.include? input
-  end
-
   def test_that_footnotes_work
     markdown = <<-MD
 This is a footnote.[^1]
@@ -188,5 +184,40 @@ HTML
     renderer = Redcarpet::Markdown.new(Redcarpet::Render::HTML, :footnotes => true)
     output = renderer.render(markdown)
     assert_equal html, output
+  end
+
+  def test_autolink_short_domains
+    markdown = "Example of uri ftp://auto/short/domains. Email auto@l.n and link http://a/u/t/o/s/h/o/r/t"
+    renderer = Redcarpet::Markdown.new(Redcarpet::Render::HTML, :autolink => true)
+    output = renderer.render(markdown)
+
+    assert output.include? '<a href="ftp://auto/short/domains">ftp://auto/short/domains</a>'
+    assert output.include? 'mailto:auto@l.n'
+    assert output.include? '<a href="http://a/u/t/o/s/h/o/r/t">http://a/u/t/o/s/h/o/r/t</a>'
+  end
+
+  def test_toc_heading_id
+    markdown = "# First level  heading\n## Second level heading"
+    output = render_with(@rndr[:toc_data], markdown)
+    assert_match /<h1 id="first-level-heading">/, output
+    assert_match /<h2 id="second-level-heading">/, output
+  end
+
+  def test_that_prettify_works
+    text = <<-Markdown
+Foo
+
+~~~ruby
+some
+code
+~~~
+
+Bar
+Markdown
+
+    renderer = Redcarpet::Markdown.new(@rndr[:prettify], fenced_code_blocks: true)
+    output = renderer.render(text)
+
+    assert output.include?("<code class=\"prettyprint ruby\">")
   end
 end

@@ -1,5 +1,104 @@
 # Changelog
 
+## Version 3.1.1
+
+* Fix a segfault when parsing text with headers.
+
+## Version 3.1.0
+
+* Yield the anchor of the headers
+
+  Using the `header` callback, it's now possible to get access to the
+  humanized generated id to easily keep tracking of the tree of headers
+  or simply handle the duplicate values easily.
+
+  Since the `HTML_TOC` and `HTML` objects both have this callback, it's
+  advisable to define a module and mix it in these objects to avoid
+  code duplication.
+
+  *Robin Dupret*
+
+* Allow using tabs between a reference's colon and its link
+
+  Fix issue [#337](https://github.com/vmg/redcarpet/issues/337)
+
+  *Juan Guerrero*
+
+* Make ordered lists preceded by paragraph parsed with `:lax_spacing`
+
+  Previously, enabling the `:lax_spacing` option, if a paragraph was
+  followed by an ordered list it was unparsed and was part of the
+  paragraph but this is no more the case.
+
+  *Robin Dupret*
+
+* Feed the gemspec into ExtensionTask so that we can pre-compile.
+  ie. `rake native gem`
+
+  *Todd Edwards*
+
+* Revert lax indent of less than 4 characters after list items
+
+  Follow the standard to detect when new paragraph is outside last item.
+  Fixes [issue #111](https://github.com/vmg/redcarpet/issues/111).
+
+  *Eric Bréchemier*
+
+* Fix code blocks' classes when using Google code prettify
+
+  When using the the `:prettify` option and specifying the
+  language name, the generated code block's class had a missing
+  space.
+
+  *Simonini*
+
+* Add `-v`/`--version` and `-h` flags to commandline redcarpet
+
+  *Lukas Stabe*
+
+* Add optional quote support through the `:quote` option. Render
+  quotations marks to `q` HTML tag.
+
+  This is a `"quote"`.
+
+  *Anatol Broder*
+
+* Ensure inline markup in titles is correctly stripped when generating
+  headers' anchor.
+
+  *Robin Dupret*
+
+* Revert the unescaping behavior on comments
+
+  This behavior doesn't follow the conformance suite.
+
+  *Robin Dupret*
+
+* Add optional footnotes support
+
+  Add PHP-Markdown style footnotes through the `:footnotes` option.
+
+  *Ben Dolman, Adam Florin, microjo, brief*
+
+* Enable GitHub style anchors for headers
+
+  Passing the `with_toc_data` option to a `HTML` render object now
+  generates GitHub style anchors.
+
+  *Matt Rogers*
+
+* Allow to set a maximum rendering level for HTML_TOC
+
+  Allow the user to pass a `nesting_level` option when instantiating a
+  new HTML_TOC render object in order to limit the nesting level in the
+  generated table of content. For example:
+
+  ~~~ruby
+  Redcarpet::Markdown.new(Redcarpet::Render::HTML_TOC.new(nesting_level: 2))
+  ~~~
+
+  *Robin Dupret*
+
 ## Version 3.0.0
 
 * Remove support for Ruby 1.8.x *Matt Rogers & Robin Dupret*
@@ -20,8 +119,6 @@
 
 * Ensure nested code spans put in emphasis work correctly *Robin Dupret*
 
-* Add optional footnotes support *Ben Dolman, Adam Florin, microjo, brief*
-  
 ## Version 2.3.0
 
 * Add a `:disable_indented_code_blocks` option *Dmitriy Kiriyenko*

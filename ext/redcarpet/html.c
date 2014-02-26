@@ -17,7 +17,7 @@
 
 #include "markdown.h"
 #include "html.h"
-
+#include "ruby.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -125,7 +125,7 @@ rndr_blockcode(struct buf *ob, const struct buf *text, const struct buf *lang, v
 	if (lang && lang->size) {
 		size_t i, cls;
 		if (options->flags & HTML_PRETTIFY) {
-			BUFPUTSL(ob, "<pre><code class=\"prettyprint");
+			BUFPUTSL(ob, "<pre><code class=\"prettyprint ");
 			cls++;
 		} else {
 			BUFPUTSL(ob, "<pre><code class=\"");
@@ -245,6 +245,19 @@ rndr_highlight(struct buf *ob, const struct buf *text, void *opaque)
 }
 
 static int
+rndr_quote(struct buf *ob, const struct buf *text, void *opaque)
+{
+	if (!text || !text->size)
+		return 0;
+
+	BUFPUTSL(ob, "<q>");
+	bufput(ob, text->data, text->size);
+	BUFPUTSL(ob, "</q>");
+
+	return 1;
+}
+
+static int
 rndr_linebreak(struct buf *ob, void *opaque)
 {
 	struct html_renderopt *options = opaque;
@@ -252,16 +265,29 @@ rndr_linebreak(struct buf *ob, void *opaque)
 	return 1;
 }
 
+char *header_anchor(const struct buf *text)
+{
+	VALUE str = rb_str_new2(bufcstr(text));
+	VALUE space_regex = rb_reg_new(" +", 2 /* length */, 0);
+	VALUE tags_regex = rb_reg_new("<\\/?[^>]*>", 10, 0);
+
+	VALUE heading = rb_funcall(str, rb_intern("gsub"), 2, space_regex, rb_str_new2("-"));
+	heading = rb_funcall(heading, rb_intern("gsub"), 2, tags_regex, rb_str_new2(""));
+	heading = rb_funcall(heading, rb_intern("downcase"), 0);
+
+	return StringValueCStr(heading);
+}
+
 static void
-rndr_header(struct buf *ob, const struct buf *text, int level, void *opaque)
+rndr_header(struct buf *ob, const struct buf *text, int level, char *anchor, void *opaque)
 {
 	struct html_renderopt *options = opaque;
 
 	if (ob->size)
 		bufputc(ob, '\n');
 
-	if (options->flags & HTML_TOC)
-		bufprintf(ob, "<h%d id=\"toc_%d\">", level, options->toc_data.header_count++);
+	if ((options->flags & HTML_TOC) && (level <= options->toc_data.nesting_level))
+		bufprintf(ob, "<h%d id=\"%s\">", level, anchor);
 	else
 		bufprintf(ob, "<h%d>", level);
 
@@ -484,15 +510,15 @@ rndr_tablecell(struct buf *ob, const struct buf *text, int flags, void *opaque)
 
 	switch (flags & MKD_TABLE_ALIGNMASK) {
 	case MKD_TABLE_ALIGN_CENTER:
-		BUFPUTSL(ob, " align=\"center\">");
+		BUFPUTSL(ob, " style=\"text-align: center\">");
 		break;
 
 	case MKD_TABLE_ALIGN_L:
-		BUFPUTSL(ob, " align=\"left\">");
+		BUFPUTSL(ob, " style=\"text-align: left\">");
 		break;
 
 	case MKD_TABLE_ALIGN_R:
-		BUFPUTSL(ob, " align=\"right\">");
+		BUFPUTSL(ob, " style=\"text-align: right\">");
 		break;
 
 	default:
@@ -581,37 +607,38 @@ rndr_footnote_ref(struct buf *ob, unsigned int num, void *opaque)
 }
 
 static void
-toc_header(struct buf *ob, const struct buf *text, int level, void *opaque)
+toc_header(struct buf *ob, const struct buf *text, int level, char *anchor, void *opaque)
 {
 	struct html_renderopt *options = opaque;
 
-	/* set the level offset if this is the first header
-	 * we're parsing for the document */
-	if (options->toc_data.current_level == 0) {
-		options->toc_data.level_offset = level - 1;
-	}
-	level -= options->toc_data.level_offset;
+	if (level <= options->toc_data.nesting_level) {
+		/* set the level offset if this is the first header
+		 * we're parsing for the document */
+		if (options->toc_data.current_level == 0)
+			options->toc_data.level_offset = level - 1;
 
-	if (level > options->toc_data.current_level) {
-		while (level > options->toc_data.current_level) {
-			BUFPUTSL(ob, "<ul>\n<li>\n");
-			options->toc_data.current_level++;
-		}
-	} else if (level < options->toc_data.current_level) {
-		BUFPUTSL(ob, "</li>\n");
-		while (level < options->toc_data.current_level) {
-			BUFPUTSL(ob, "</ul>\n</li>\n");
-			options->toc_data.current_level--;
-		}
-		BUFPUTSL(ob,"<li>\n");
-	} else {
-		BUFPUTSL(ob,"</li>\n<li>\n");
-	}
+		level -= options->toc_data.level_offset;
 
-	bufprintf(ob, "<a href=\"#toc_%d\">", options->toc_data.header_count++);
-	if (text)
-		escape_html(ob, text->data, text->size);
-	BUFPUTSL(ob, "</a>\n");
+		if (level > options->toc_data.current_level) {
+			while (level > options->toc_data.current_level) {
+				BUFPUTSL(ob, "<ul>\n<li>\n");
+				options->toc_data.current_level++;
+			}
+		} else if (level < options->toc_data.current_level) {
+			BUFPUTSL(ob, "</li>\n");
+			while (level < options->toc_data.current_level) {
+				BUFPUTSL(ob, "</ul>\n</li>\n");
+				options->toc_data.current_level--;
+			}
+			BUFPUTSL(ob,"<li>\n");
+		} else {
+			BUFPUTSL(ob,"</li>\n<li>\n");
+		}
+
+		bufprintf(ob, "<a href=\"#%s\">", anchor);
+		if (text) escape_html(ob, text->data, text->size);
+		BUFPUTSL(ob, "</a>\n");
+	}
 }
 
 static int
@@ -634,7 +661,7 @@ toc_finalize(struct buf *ob, void *opaque)
 }
 
 void
-sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options)
+sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options, int nesting_level)
 {
 	static const struct sd_callbacks cb_default = {
 		NULL,
@@ -657,6 +684,7 @@ sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *optio
 		rndr_emphasis,
 		rndr_underline,
 		rndr_highlight,
+		rndr_quote,
 		NULL,
 		NULL,
 		toc_link,
@@ -675,6 +703,7 @@ sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *optio
 
 	memset(options, 0x0, sizeof(struct html_renderopt));
 	options->flags = HTML_TOC;
+	options->toc_data.nesting_level = nesting_level;
 
 	memcpy(callbacks, &cb_default, sizeof(struct sd_callbacks));
 }
@@ -703,6 +732,7 @@ sdhtml_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options, 
 		rndr_emphasis,
 		rndr_underline,
 		rndr_highlight,
+		rndr_quote,
 		rndr_image,
 		rndr_linebreak,
 		rndr_link,
@@ -722,6 +752,7 @@ sdhtml_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options, 
 	/* Prepare the options pointer */
 	memset(options, 0x0, sizeof(struct html_renderopt));
 	options->flags = render_flags;
+	options->toc_data.nesting_level = 99;
 
 	/* Prepare the callbacks */
 	memcpy(callbacks, &cb_default, sizeof(struct sd_callbacks));
