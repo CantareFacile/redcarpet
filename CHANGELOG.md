@@ -1,5 +1,36 @@
 # Changelog
 
+* Fix emphasis character escape sequence detection while mid-emphasis.
+
+  *jcheatham*
+
+* Convert trailing single quotes to curly quotes. For example,
+  `Road Trippin'` now converts to `Road Trippin’`.
+
+  *Kevin Chen*
+
+* Allow in-page links (e.g. `[headline](#headline)`) when `:safe_links_only` is set.
+
+  *jomo*
+
+* Enable emphasis inside of sentences in multi-byte languages when
+  `:no_intra_emphasis` is set.
+
+  *Chun-wei Kuo*
+
+* Avoid making `:no_intra_emphasis` only match spaces. This allows
+  using emphasizes inside quotes when the option is enabled for
+  instance.
+
+  *Jason Webb* and *BJ Homer*
+
+* The StripDown renderer handles image tags now.
+
+## Version 3.1.2
+
+* Remove the yielding of anchors in the `header` callback. This was
+  a breaking change between 3.0 and 3.1 as the method's arity changed.
+
 ## Version 3.1.1
 
 * Fix a segfault when parsing text with headers.
