@@ -17,7 +17,6 @@
 
 #include "markdown.h"
 #include "html.h"
-#include "ruby.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -125,7 +124,7 @@ rndr_blockcode(struct buf *ob, const struct buf *text, const struct buf *lang, v
 	if (lang && lang->size) {
 		size_t i, cls;
 		if (options->flags & HTML_PRETTIFY) {
-			BUFPUTSL(ob, "<pre><code class=\"prettyprint ");
+			BUFPUTSL(ob, "<pre><code class=\"prettyprint lang-");
 			cls++;
 		} else {
 			BUFPUTSL(ob, "<pre><code class=\"");
@@ -265,17 +264,60 @@ rndr_linebreak(struct buf *ob, void *opaque)
 	return 1;
 }
 
-char *header_anchor(struct buf *text)
+char *header_anchor(const struct buf *buffer)
 {
-	VALUE str = rb_str_new2(bufcstr(text));
-	VALUE space_regex = rb_reg_new(" +", 2 /* length */, 0);
-	VALUE tags_regex = rb_reg_new("<\\/?[^>]*>", 10, 0);
+	size_t i, j, k, size = buffer->size;
 
-	VALUE heading = rb_funcall(str, rb_intern("gsub"), 2, space_regex, rb_str_new2("-"));
-	heading = rb_funcall(heading, rb_intern("gsub"), 2, tags_regex, rb_str_new2(""));
-	heading = rb_funcall(heading, rb_intern("downcase"), 0);
+	char text[size];
+	strcpy(text, bufcstr(buffer));
 
-	return StringValueCStr(heading);
+	char raw_string[size];
+
+	/* Strip down the inline HTML markup if needed */
+	if (strchr(text, '<') < strchr(text, '>')) {
+		char* part = strtok(text, "<>");
+
+		/* Once every two times, the yielded token is the
+		   content of a HTML tag so we don't need to copy it */
+		for (k = 0; part != NULL; k++) {
+			if (k == 0)
+				strcpy(raw_string, part);
+			else if (k % 2 == 0)
+				strcat(raw_string, part);
+
+			part = strtok(NULL, "<>");
+		}
+
+		size = strlen(raw_string);
+	} else {
+		strcpy(raw_string, text);
+	}
+
+	char* heading = malloc(size * sizeof(char));
+
+	/* Remove extra white spaces and lower case all
+	   characters ; also replace spaces with dashes */
+	for (i = 0, j = 0; i <= size; ++i) {
+		/* Collapse a stripped char surrounded by spaces
+		   to a single space (e.g. " + " -> " ") */
+		if (raw_string[i-1] == ' ' && raw_string[i+1] == ' '
+		    && STRIPPED_CHAR(raw_string[i]) && (i+1) < size)
+			i = i + 2;
+
+		/* Remove double spaces and stripped out chars */
+		if ((raw_string[i] == ' ' && raw_string[i+1] == ' ')
+		   || (STRIPPED_CHAR(raw_string[i]) && i < size))
+			continue;
+
+		if (raw_string[i] == ' ')
+			heading[j] = '-';
+		else
+			heading[j] = tolower(raw_string[i]);
+
+		j++;
+	}
+
+	return heading;
 }
 
 static void
@@ -661,7 +703,7 @@ toc_finalize(struct buf *ob, void *opaque)
 }
 
 void
-sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options, int nesting_level)
+sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options)
 {
 	static const struct sd_callbacks cb_default = {
 		NULL,
@@ -703,7 +745,6 @@ sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *optio
 
 	memset(options, 0x0, sizeof(struct html_renderopt));
 	options->flags = HTML_TOC;
-	options->toc_data.nesting_level = nesting_level;
 
 	memcpy(callbacks, &cb_default, sizeof(struct sd_callbacks));
 }
