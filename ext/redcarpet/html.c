@@ -295,28 +295,19 @@ char *header_anchor(const struct buf *buffer)
 
 	char* heading = malloc(size * sizeof(char));
 
-	/* Remove extra white spaces and lower case all
-	   characters ; also replace spaces with dashes */
-	for (i = 0, j = 0; i <= size; ++i) {
-		/* Collapse a stripped char surrounded by spaces
-		   to a single space (e.g. " + " -> " ") */
-		if (raw_string[i-1] == ' ' && raw_string[i+1] == ' '
-		    && STRIPPED_CHAR(raw_string[i]) && (i+1) < size)
-			i = i + 2;
+	/* Dasherize the string removing extra white spaces
+	   and stripped chars */
+	for (i = 0, j = 0; i < size; ++i, ++j) {
+		while (STRIPPED_CHAR(raw_string[i]) && STRIPPED_CHAR(raw_string[i+1]))
+			i++;
 
-		/* Remove double spaces and stripped out chars */
-		if ((raw_string[i] == ' ' && raw_string[i+1] == ' ')
-		   || (STRIPPED_CHAR(raw_string[i]) && i < size))
-			continue;
-
-		if (raw_string[i] == ' ')
+		if (STRIPPED_CHAR(raw_string[i]))
 			heading[j] = '-';
 		else
 			heading[j] = tolower(raw_string[i]);
-
-		j++;
 	}
 
+	heading[j++] = '\0';
 	return heading;
 }
 
@@ -437,15 +428,30 @@ rndr_paragraph(struct buf *ob, const struct buf *text, void *opaque)
 static void
 rndr_raw_block(struct buf *ob, const struct buf *text, void *opaque)
 {
-	size_t org, sz;
-	if (!text) return;
-	sz = text->size;
-	while (sz > 0 && text->data[sz - 1] == '\n') sz--;
-	org = 0;
-	while (org < sz && text->data[org] == '\n') org++;
-	if (org >= sz) return;
-	if (ob->size) bufputc(ob, '\n');
-	bufput(ob, text->data + org, sz - org);
+	size_t org, size;
+	struct html_renderopt *options = opaque;
+
+	if (!text)
+		return;
+
+	size = text->size;
+	while (size > 0 && text->data[size - 1] == '\n')
+		size--;
+
+	for (org = 0; org < size && text->data[org] == '\n'; ++org)
+
+	if (org >= size)
+		return;
+
+	/* Remove style tags if the `:no_styles` option is enabled */
+	if ((options->flags & HTML_SKIP_STYLE) != 0 &&
+		sdhtml_is_tag(text->data, size, "style"))
+		return;
+
+	if (ob->size)
+		bufputc(ob, '\n');
+
+	bufput(ob, text->data + org, size - org);
 	bufputc(ob, '\n');
 }
 
@@ -471,7 +477,9 @@ static int
 rndr_image(struct buf *ob, const struct buf *link, const struct buf *title, const struct buf *alt, void *opaque)
 {
 	struct html_renderopt *options = opaque;
-	if (!link || !link->size) return 0;
+
+	if (link != NULL && (options->flags & HTML_SAFELINK) != 0 && !sd_autolink_issafe(link->data, link->size))
+		return 0;
 
 	BUFPUTSL(ob, "<img src=\"");
 	escape_href(ob, link->data, link->size);
@@ -494,7 +502,7 @@ rndr_raw_html(struct buf *ob, const struct buf *text, void *opaque)
 	struct html_renderopt *options = opaque;
 
 	/* HTML_ESCAPE overrides SKIP_HTML, SKIP_STYLE, SKIP_LINKS and SKIP_IMAGES
-	* It doens't see if there are any valid tags, just escape all of them. */
+	   It doesn't see if there are any valid tags, just escape all of them. */
 	if((options->flags & HTML_ESCAPE) != 0) {
 		escape_html(ob, text->data, text->size);
 		return 1;
@@ -678,7 +686,14 @@ toc_header(struct buf *ob, const struct buf *text, int level, void *opaque)
 		}
 
 		bufprintf(ob, "<a href=\"#%s\">", header_anchor(text));
-		if (text) escape_html(ob, text->data, text->size);
+
+		if (text) {
+			if (options->flags & HTML_ESCAPE)
+				escape_html(ob, text->data, text->size);
+			else
+				bufput(ob, text->data, text->size);
+		}
+
 		BUFPUTSL(ob, "</a>\n");
 	}
 }
@@ -703,7 +718,7 @@ toc_finalize(struct buf *ob, void *opaque)
 }
 
 void
-sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options)
+sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *options, unsigned int render_flags)
 {
 	static const struct sd_callbacks cb_default = {
 		NULL,
@@ -744,7 +759,7 @@ sdhtml_toc_renderer(struct sd_callbacks *callbacks, struct html_renderopt *optio
 	};
 
 	memset(options, 0x0, sizeof(struct html_renderopt));
-	options->flags = HTML_TOC;
+	options->flags = render_flags;
 
 	memcpy(callbacks, &cb_default, sizeof(struct sd_callbacks));
 }

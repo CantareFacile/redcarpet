@@ -1,10 +1,45 @@
 # Changelog
 
+* Undeprecate the compatibility layer for the old RedCloth API.
+
+  This layer actually ease the support of libraries supporting different
+  Markdown processors.
+
+* Strip out `style` tags at the HTML-block rendering level when the
+  `:no_styles` options is enabled ; previously they were only removed
+  inside paragraphs.
+
+* Avoid parsing images when the given URL isn't safe and the
+  `:safe_links_only` option is enabled.
+
+  *Alex Serban*
+
+* Avoid parsing references inside fenced code blocks so they are
+  now kept in the code snippet.
+
+  *David Waller*
+
+* Avoid escaping table-of-contents' headers by default. A new
+  `:escape_html` option is now available for the `HTML_TOC` object
+  if there are security concerns.
+
 * Add the `lang-` prefix in front of the language's name when using
   `:prettify` along with `:fenced_code_blocks`.
 
 * Non-alphanumeric chars are now stripped out from generated anchors
   (along the lines of Active Support's `#parameterize` method).
+
+## Version 3.2.2
+
+* Consider `script` as a block-level element so it doesn't get included
+  inside a paragraph.
+
+## Version 3.2.1
+
+* Load `RedcarpetCompat` when requiring Redcarpet for the sake of
+  backward compatibility.
+
+  *Loren Segal*
 
 ## Version 3.2.0
 

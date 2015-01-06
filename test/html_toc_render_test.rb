@@ -51,11 +51,26 @@ class HTMLTOCRenderTest < Redcarpet::TestCase
       "Trailing bad characters!@#"          => "trailing-bad-characters",
       "!@#Leading bad characters"           => "leading-bad-characters",
       "Squeeze   separators"                => "squeeze-separators",
-      "Test with + sign"                    => "test-with-sign"
+      "Test with + sign"                    => "test-with-sign",
+      "Test with a Namespaced::Class"       => "test-with-a-namespaced-class"
     }
 
     titles.each do |title, anchor|
       assert_match anchor, render("# #{title}")
     end
+  end
+
+  def test_inline_markup_is_not_escaped
+    output = render(@markdown)
+
+    assert_match "A <strong>nice</strong> subtitle", output
+    assert_no_match %r{&lt;}, output
+  end
+
+  def test_inline_markup_escaping
+    output = render(@markdown, with: [:escape_html])
+
+    assert_match "&lt;strong&gt;", output
+    assert_no_match %r{<strong>}, output
   end
 end
